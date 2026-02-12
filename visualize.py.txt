@@ -2,103 +2,68 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import os
 
 sns.set_theme(style="whitegrid")
 plt.rcParams['figure.figsize'] = (12, 7)
 
-DATA_DIR = 'data/'
-IMG_DIR = 'images/'
-
-os.makedirs(IMG_DIR, exist_ok=True)
-
-agg_file = DATA_DIR + "_WITH_Costs_AS_SELECT_campaign_date_utm_source_utm_medium_utm_ca_202602041823.csv"
-raw_file = DATA_DIR + "paidclicks_202602041821.csv"
-
-agg_df = pd.read_csv(agg_file)
-raw_df = pd.read_csv(raw_file)
-
+agg_df = pd.read_csv('aggregate_last_paid_click.csv')
 agg_df['visit_date'] = pd.to_datetime(agg_df['visit_date'])
 
-# --- Расчет маркетинговых метрик ---
-# CR % (Конверсия в покупку)
-agg_df['cr_pct'] = (agg_df['purchases_count'] / agg_df['visitors_count'] * 100).fillna(0)
+def save_and_clear(filename):
+    plt.savefig(filename)
+    plt.close()
 
-# ROI % (Окупаемость)
-agg_df['roi_pct'] = ((agg_df['revenue'] - agg_df['total_cost']) / agg_df['total_cost'] * 100).replace([np.inf, -np.inf], 0).fillna(0)
-
-# CPL (Стоимость лида)
-agg_df['cpl'] = (agg_df['total_cost'] / agg_df['leads_count']).replace([np.inf, -np.inf], 0).fillna(0)
-
-# CPP (Стоимость покупки)
-agg_df['cpp'] = (agg_df['total_cost'] / agg_df['purchases_count']).replace([np.inf, -np.inf], 0).fillna(0)
-
-# --- 1. Top Sellers Income (chart1_top_sellers.png) ---
-plt.figure()
 top_sources = agg_df.groupby('utm_source')['revenue'].sum().sort_values(ascending=False).reset_index()
-sns.barplot(data=top_sources, x='utm_source', y='revenue', palette='viridis')
-plt.title('Top Sellers Income', fontsize=15)
-plt.savefig(IMG_DIR + 'chart1_top_sellers.png')
-plt.close()
+sns.barplot(data=top_sources, x='utm_source', y='revenue', hue='utm_source', palette='viridis')
+plt.title('Top Sellers Income by Source', fontsize=15)
+plt.ylabel('Total Revenue')
+save_and_clear('chart1_top_sellers.png')
 
-# --- 2. Efficiency Audit: Conversion Rate (chart2_efficiency_audit.png) ---
-plt.figure()
-eff = agg_df.groupby('utm_source')['cr_pct'].mean().sort_values(ascending=False).reset_index()
-sns.barplot(data=eff, x='utm_source', y='cr_pct', palette='magma')
-plt.title('Efficiency Audit (Conversion Rate %)', fontsize=15)
-plt.savefig(IMG_DIR + 'chart2_efficiency_audit.png')
-plt.close()
+eff = agg_df.groupby('utm_source').agg({'purchases_count': 'sum', 'visitors_count': 'sum'}).reset_index()
+eff['cr_pct'] = (eff['purchases_count'] / eff['visitors_count'] * 100).fillna(0)
+eff = eff.sort_values('cr_pct', ascending=False)
+sns.barplot(data=eff, x='utm_source', y='cr_pct', hue='utm_source', palette='magma')
+plt.title('Efficiency Audit (Conversion Rate % by Source)', fontsize=15)
+plt.ylabel('CR %')
+save_and_clear('chart2_efficiency_audit.png')
 
-# --- 3. Popular Products (chart3_popular_products.png) ---
-plt.figure()
 pop_camp = agg_df.groupby('utm_campaign')['leads_count'].sum().sort_values(ascending=False).head(10).reset_index()
-sns.barplot(data=pop_camp, x='leads_count', y='utm_campaign', palette='Blues_r')
+sns.barplot(data=pop_camp, x='leads_count', y='utm_campaign', hue='utm_campaign', palette='Blues_r')
 plt.title('Popular Products (Top 10 Campaigns by Leads)', fontsize=15)
-plt.savefig(IMG_DIR + 'chart3_popular_products.png')
-plt.close()
+save_and_clear('chart3_popular_products.png')
 
-# --- 4. Profitable Products (chart4_profitable_products.png) ---
-plt.figure()
 prof_camp = agg_df.groupby('utm_campaign')['revenue'].sum().sort_values(ascending=False).head(10).reset_index()
-sns.barplot(data=prof_camp, x='revenue', y='utm_campaign', palette='Greens_r')
+sns.barplot(data=prof_camp, x='revenue', y='utm_campaign', hue='utm_campaign', palette='Greens_r')
 plt.title('Profitable Products (Top 10 Campaigns by Revenue)', fontsize=15)
-plt.savefig(IMG_DIR + 'chart4_profitable_products.png')
-plt.close()
+save_and_clear('chart4_profitable_products.png')
 
-# --- 5. Demographics (chart5_demographics.png) ---
-plt.figure(figsize=(8, 8))
 med_dist = agg_df.groupby('utm_medium')['revenue'].sum().reset_index()
 plt.pie(med_dist['revenue'], labels=med_dist['utm_medium'], autopct='%1.1f%%', colors=sns.color_palette('pastel'))
 plt.title('Revenue Segmentation by Medium', fontsize=15)
-plt.savefig(IMG_DIR + 'chart5_demographics.png')
-plt.close()
+save_and_clear('chart5_demographics.png')
 
-# --- 6. Monthly Trends (chart6_monthly_trends.png) ---
-plt.figure()
 daily_rev = agg_df.groupby(agg_df['visit_date'].dt.date)['revenue'].sum().reset_index()
 plt.plot(daily_rev['visit_date'], daily_rev['revenue'], marker='o', color='teal', linewidth=2)
-plt.title('Monthly Trends (Daily Revenue)', fontsize=15)
+plt.title('Daily Revenue Trends', fontsize=15)
+plt.xlabel('Date')
+plt.ylabel('Revenue')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(IMG_DIR + 'chart6_monthly_trends.png')
-plt.close()
+save_and_clear('chart6_monthly_trends.png')
 
-# --- 7. Daily Activity (chart7_daily_activity.png) ---
-plt.figure()
 agg_df['day_name'] = agg_df['visit_date'].dt.day_name()
 days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 daily_act = agg_df.groupby('day_name')['visitors_count'].sum().reindex(days_order).reset_index()
 sns.barplot(data=daily_act, x='day_name', y='visitors_count', color='skyblue')
 plt.title('Daily Activity (Visitors)', fontsize=15)
-plt.savefig(IMG_DIR + 'chart7_daily_activity.png')
-plt.close()
+save_and_clear('chart7_daily_activity.png')
 
-# --- 8. ROI Analysis by Source (chart8_roi_analysis.png) ---
-plt.figure()
-roi_data = agg_df.groupby('utm_source')['roi_pct'].mean().sort_values(ascending=False).reset_index()
-sns.barplot(data=roi_data, x='utm_source', y='roi_pct', palette='coolwarm')
+roi_data = agg_df.groupby('utm_source').agg({'revenue': 'sum', 'total_cost': 'sum'}).reset_index()
+roi_data['roi_pct'] = ((roi_data['revenue'] - roi_data['total_cost']) / roi_data['total_cost'] * 100).replace([np.inf, -np.inf], 0).fillna(0)
+roi_data = roi_data.sort_values('roi_pct', ascending=False)
+sns.barplot(data=roi_data, x='utm_source', y='roi_pct', hue='utm_source', palette='coolwarm')
 plt.title('ROI by Source (%)', fontsize=15)
-plt.savefig(IMG_DIR + 'chart8_roi_analysis.png')
-plt.close()
+plt.ylabel('ROI %')
+save_and_clear('chart8_roi_analysis.png')
 
-print(f"Анализ завершен. Все метрики (ROI, CR, CPL, CPP) рассчитаны. Графики сохранены в папку {IMG_DIR}")
+print("Анализ завершен. Графики сохранены.")
